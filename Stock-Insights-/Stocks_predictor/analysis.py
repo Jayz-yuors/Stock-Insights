@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from db_config import create_connection, close_connection
@@ -170,7 +170,8 @@ def best_time_to_invest(df):
     if 'SMA' not in df:
         df = compute_sma(df)
     return df[df['close_price'] > df['SMA']]['trade_date']
-=======
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from db_config import create_connection, close_connection
@@ -339,4 +340,4 @@ def best_time_to_invest(df):
     if 'SMA' not in df:
         df = compute_sma(df)
     return df[df['close_price'] > df['SMA']]['trade_date']
->>>>>>> d342524 (Clean up duplicates and align files)
+
