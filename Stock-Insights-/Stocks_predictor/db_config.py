@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import psycopg2
 from psycopg2 import OperationalError
 import streamlit as st
@@ -22,7 +22,8 @@ def close_connection(connection):
     if connection:
         connection.close()
         print("PostgreSQL connection closed.")
-=======
+
+
 import psycopg2
 from psycopg2 import OperationalError
 def create_connection ():
@@ -43,4 +44,4 @@ def close_connection(connection):
     if connection :
         connection.close()
         print("PostGreSQL Connection closed:")
->>>>>>> d342524 (Clean up duplicates and align files)
+
