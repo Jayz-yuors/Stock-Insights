@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 from db_config import create_connection, close_connection
 
 def insert_companies(companies):
@@ -67,7 +67,8 @@ if __name__ == "__main__":
     ]
 
     insert_companies(companies_list)
-=======
+
+
 from db_config import create_connection ,close_connection
 def insert_companies(companies):
     conn = create_connection()
@@ -130,4 +131,4 @@ if __name__ == "__main__":
         ("Hindalco Industries", "HINDALCO.NS")
     ]
     insert_companies(companies_list) 
->>>>>>> d342524 (Clean up duplicates and align files)
+
