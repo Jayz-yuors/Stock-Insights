@@ -68,12 +68,22 @@ def insert_prices(data, company_id, source='yfinance'):
 
 def get_company_list():
     conn = create_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT company_id, ticker_symbol FROM companies;")
-    result = cursor.fetchall()
-    cursor.close()
-    close_connection(conn)
-    return result
+    if conn is None:
+        print("Failed to connect to the database.")
+        return []
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT company_id, ticker_symbol FROM companies;")
+        result = cursor.fetchall()
+        return result
+    except Exception as e:
+        print(f"Database query error: {e}")
+        return []
+    finally:
+        if conn:
+            cursor.close()
+            close_connection(conn)
+
 
 if __name__ == "__main__":
     companies = get_company_list()
@@ -89,3 +99,4 @@ if __name__ == "__main__":
                 insert_prices(data, company_id, source='yfinance')
             else:
                 print(f"No data found for {ticker}.")
+
