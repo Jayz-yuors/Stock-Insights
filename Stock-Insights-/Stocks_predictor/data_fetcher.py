@@ -1,4 +1,4 @@
-from db_config import create_connection, close_connection
+from db_config import create_connection
 from alpha_vantage.timeseries import TimeSeries
 import yfinance as yf
 from datetime import datetime
@@ -76,3 +76,4 @@ def run_fetching():
             else:
                 print(f"No data found for {ticker}.")
     print(f"Fetching data completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
