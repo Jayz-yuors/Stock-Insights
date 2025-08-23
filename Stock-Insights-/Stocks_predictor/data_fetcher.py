@@ -55,9 +55,10 @@ def insert_prices(data, ticker_symbol, source='yfinance'):
 
 def get_company_list():
     db = create_connection()
-    companies = db.companies.find({})
-    # Return list of ticker_symbols
+    companies = list(db.companies.find({}))
+    print("Companies found:", companies)   # Debug print
     return [c["ticker_symbol"] for c in companies]
+
 
 
 def run_fetching():
@@ -76,4 +77,5 @@ def run_fetching():
             else:
                 print(f"No data found for {ticker}.")
     print(f"Fetching data completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
 
