@@ -4,32 +4,19 @@ import pandas as pd
 from db_config import create_connection, close_connection
 
 def fetch_prices(company_id, start_date=None, end_date=None):
-    conn = create_connection()
-    if conn is None:
-        print("Failed to connect to Database:")
-        return None
-    query = """
-    SELECT trade_date, close_price
-    FROM stock_prices
-    WHERE company_id = %s
-    """
-    params = [company_id]
-    if start_date:
-        query += " AND trade_date >= %s"
-        params.append(start_date)
-    if end_date:
-        query += " AND trade_date <= %s"
-        params.append(end_date)
-    query += " ORDER BY trade_date"
-    try:
-        df = pd.read_sql(query, conn, params=tuple(params))
+    db = create_connection()
+    query = {"ticker_symbol": ticker_symbol}
+    if start_date and end_date:
+        query["trade_date"] = {"$gte": str(start_date), "$lte": str(end_date)}
+    elif start_date:
+        query["trade_date"] = {"$gte": str(start_date)}
+    elif end_date:
+        query["trade_date"] = {"$lte": str(end_date)}
+    cursor = db.stock_prices.find(query).sort("trade_date", 1)
+    df = pd.DataFrame(list(cursor))
+    if not df.empty:
         df['trade_date'] = pd.to_datetime(df['trade_date'])
-    except Exception as e:
-        print(f"Error fetching prices: {e}")
-        df = None
-    finally:
-        close_connection(conn)
-    return df
+    return df if not df.empty else None
 
 def fetch_current_price(company_id):
     conn = create_connection()
@@ -53,19 +40,8 @@ def fetch_current_price(company_id):
         close_connection(conn)
 
 def fetch_company_info(company_id):
-    conn = create_connection()
-    query = "SELECT * FROM companies WHERE company_id = %s"
-    try:
-        df = pd.read_sql(query, conn, params=(company_id,))
-        if not df.empty:
-            return df.iloc[0]
-        else:
-            return None
-    except Exception as e:
-        print(f"Error fetching company info: {e}")
-        return None
-    finally:
-        close_connection(conn)
+    db = create_connection()
+    return db.companies.find_one({"ticker_symbol": ticker_symbol})
 
 # --- ANALYTICS ---
 
@@ -170,8 +146,6 @@ def best_time_to_invest(df):
     if 'SMA' not in df:
         df = compute_sma(df)
     return df[df['close_price'] > df['SMA']]['trade_date']
-
-
 import matplotlib.pyplot as plt
 import pandas as pd
 from db_config import create_connection, close_connection
