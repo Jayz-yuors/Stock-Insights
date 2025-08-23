@@ -40,3 +40,6 @@ coverage.xml
 
 # Mac OS files
 .DS_Store
+
+# Make sure .github folder is not ignored
+!.github/
