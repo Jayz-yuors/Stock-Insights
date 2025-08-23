@@ -6,6 +6,7 @@ import pandas as pd
 
 ALPHA_VANTAGE_API_KEY = 'H13FNA09HVUDWWKU'
 
+
 def fetch_alpha_vantage(ticker):
     try:
         ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
@@ -15,9 +16,9 @@ def fetch_alpha_vantage(ticker):
         print(f"Alpha Vantage error for {ticker}: {e}")
         return None
 
+
 def fetch_yfinance(ticker):
     try:
-        # Fetch data up to today's date dynamically
         data = yf.download(ticker, period="max", interval="1d", auto_adjust=True)
         if data.empty:
             print(f"YFinance data empty for {ticker}")
@@ -27,76 +28,51 @@ def fetch_yfinance(ticker):
         print(f"yfinance error for {ticker}: {e}")
         return None
 
-def insert_prices(data, company_id, source='yfinance'):
-    conn = create_connection()
-    if conn is None:
-        print("Failed to connect to the database:")
-        return
-    cursor = conn.cursor()
-    insert_query = """
-    INSERT INTO stock_prices (company_id, trade_date, open_price, high_price, low_price, close_price, volume)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (company_id, trade_date) DO NOTHING;
-    """
+
+def insert_prices(data, ticker_symbol, source='yfinance'):
+    db = create_connection()
     count = 0
-    try:
-        for idx, row in data.iterrows():
-            if source == "yfinance":
-                trade_date = idx.date() if isinstance(idx, pd.Timestamp) else idx
-                open_p = float(row['Open'])
-                high_p = float(row['High'])
-                low_p = float(row['Low'])
-                close_p = float(row['Close'])
-                volume = int(row['Volume']) if not pd.isna(row['Volume']) else 0
-            else:
-                trade_date = idx.date()
-                open_p = float(row['1. open'])
-                high_p = float(row['2. high'])
-                low_p = float(row['3. low'])
-                close_p = float(row['4. close'])
-                volume = int(row['5. volume'])
-            cursor.execute(insert_query, (company_id, trade_date, open_p, high_p, low_p, close_p, volume))
-            count += cursor.rowcount
-        conn.commit()
-        print(f"{count} rows inserted for company {company_id} using source: {source}")
-    except Exception as e:
-        conn.rollback()
-        print(f"Insert error: {e}")
-    finally:
-        cursor.close()
-        close_connection(conn)
+    for idx, row in data.iterrows():
+        doc = {
+            "ticker_symbol": ticker_symbol,
+            "trade_date": idx.strftime('%Y-%m-%d'),
+            "open_price": float(row['Open']) if source == 'yfinance' else float(row['1. open']),
+            "high_price": float(row['High']) if source == 'yfinance' else float(row['2. high']),
+            "low_price": float(row['Low']) if source == 'yfinance' else float(row['3. low']),
+            "close_price": float(row['Close']) if source == 'yfinance' else float(row['4. close']),
+            "volume": int(row['Volume']) if source == 'yfinance' and not pd.isna(row['Volume']) else (int(row['5. volume']) if source != 'yfinance' else 0),
+            "source": source
+        }
+        # Upsert to avoid duplicates
+        db.stock_prices.update_one(
+            {"ticker_symbol": ticker_symbol, "trade_date": doc["trade_date"]},
+            {"$set": doc},
+            upsert=True
+        )
+        count += 1
+    print(f"{count} rows inserted/updated for company {ticker_symbol} using source: {source}")
+
 
 def get_company_list():
-    conn = create_connection()
-    if conn is None:
-        print("Failed to connect to the database.")
-        return []
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT company_id, ticker_symbol FROM companies;")
-        result = cursor.fetchall()
-        return result
-    except Exception as e:
-        print(f"Database query error: {e}")
-        return []
-    finally:
-        if conn:
-            cursor.close()
-            close_connection(conn)
+    db = create_connection()
+    companies = db.companies.find({})
+    # Return list of ticker_symbols
+    return [c["ticker_symbol"] for c in companies]
 
 
-if __name__ == "__main__":
+def run_fetching():
+    print(f"Fetching data started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     companies = get_company_list()
-    for company_id, ticker in companies:
+    for ticker in companies:
         print(f"Fetching and inserting for {ticker}")
         data = fetch_alpha_vantage(ticker)
         if data is not None and not data.empty:
-            insert_prices(data, company_id, source='alpha_vantage')
+            insert_prices(data, ticker, source='alpha_vantage')
         else:
-            print("AlphaVantage failed, trying yfinance.")
+            print("Alpha Vantage failed, trying yfinance.")
             data = fetch_yfinance(ticker)
             if data is not None and not data.empty:
-                insert_prices(data, company_id, source='yfinance')
+                insert_prices(data, ticker, source='yfinance')
             else:
                 print(f"No data found for {ticker}.")
-
+    print(f"Fetching data completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
