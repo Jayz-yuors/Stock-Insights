@@ -1,23 +1,13 @@
-import psycopg2
-from psycopg2 import OperationalError
+from pymongo import MongoClient
 import streamlit as st
 
 def create_connection():
-    connection = None
-    try:
-        connection = psycopg2.connect(
-            dbname=st.secrets.get("DB_NAME", "DemoDb"),
-            user=st.secrets.get("DB_USER", "postgres"),
-            password=st.secrets.get("DB_PASSWORD", "Jay@123!"),
-            host=st.secrets.get("DB_HOST", "localhost"),
-            port=st.secrets.get("DB_PORT", "5432")
-        )
-        print("Connection to PostgreSQL DB successful")
-    except OperationalError as e:
-        print(f"The error '{e}' occurred")
-    return connection
+    # Connect using the MongoDB connection string from Streamlit secrets.
+    client = MongoClient(st.secrets["MONGO_URL"])
+    db_name = st.secrets.get("MONGO_DB", "stocks_db")  # fallback if not set
+    db = client[db_name]
+    return db
 
-def close_connection(connection):
-    if connection:
-        connection.close()
-        print("PostgreSQL connection closed.")
+def close_connection(_):
+    # No explicit close needed for MongoDB client connections.
+    pass
