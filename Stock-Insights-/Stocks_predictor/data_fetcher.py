@@ -31,7 +31,7 @@ def fetch_yfinance(ticker):
 
 def safe_scalar(val):
     if isinstance(val, pd.Series):
-        return val.iloc[0]
+        return val.item[0]
     return val
 
 def insert_prices(data, ticker_symbol, source='yfinance'):
@@ -94,4 +94,5 @@ def run_fetching():
             else:
                 print(f"No data found for {ticker}.")
     print(f"Fetching data completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
 
