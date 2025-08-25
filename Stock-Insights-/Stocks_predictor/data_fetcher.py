@@ -27,6 +27,8 @@ def fetch_yfinance(ticker):
         return None
 
 # Helper function to extract scalar from Series or just return the value
+
+
 def safe_scalar(val):
     if isinstance(val, pd.Series):
         return val.iloc[0]
@@ -61,7 +63,6 @@ def insert_prices(data, ticker_symbol, source='yfinance'):
             "volume": volume,
             "source": source
         }
-        # Upsert to avoid duplicates
         db.stock_prices.update_one(
             {"ticker_symbol": ticker_symbol, "trade_date": doc["trade_date"]},
             {"$set": doc},
@@ -69,6 +70,7 @@ def insert_prices(data, ticker_symbol, source='yfinance'):
         )
         count += 1
     print(f"{count} rows inserted/updated for company {ticker_symbol} using source: {source}")
+
 
 def get_company_list():
     db = create_connection()
@@ -92,3 +94,4 @@ def run_fetching():
             else:
                 print(f"No data found for {ticker}.")
     print(f"Fetching data completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
