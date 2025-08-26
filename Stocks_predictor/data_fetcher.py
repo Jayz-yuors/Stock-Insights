@@ -47,7 +47,7 @@ def get_company_id(conn, ticker_symbol):
 
 def insert_prices(df, ticker_symbol):
     # Filter for data from 2010-01-01 onwards
-    df = df[df.index >= '2015-01-01']
+    df = df[df.index >= '2010-01-01']
     if df.empty:
         print(f"No price data from 2010 onwards for {ticker_symbol}")
         return
@@ -133,3 +133,4 @@ if __name__ == "__main__":
             insert_prices(data, test_ticker)
         else:
             print(f"No data found for {test_ticker}.")
+
