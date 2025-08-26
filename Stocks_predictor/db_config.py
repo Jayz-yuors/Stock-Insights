@@ -1,9 +1,11 @@
 import psycopg2
-PG_HOST = "localhost"        # Change to your PG server
+# use PGADMIN-SOFTWARE for simplicity 
+# Run the Schema.sql as it is firstly in ur database(using Query Tool) -> then use the same database for DB_CONFIGURATION
+PG_HOST = "localhost"       
 PG_PORT = 5432
-PG_DB   = "DemoDb"
-PG_USER = "postgres"      # <-- CHANGE THIS
-PG_PASS = "JayK@123!"  # <-- CHANGE THIS
+PG_DB   = "YOUR_DATABASE_NAME"
+PG_USER = "YOUR_DATABASE_USER_NAME"    
+PG_PASS = "YOUR_DATABSE_PASSWORD"   
 
 def create_connection():
     conn = psycopg2.connect(
