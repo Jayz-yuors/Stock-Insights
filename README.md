@@ -40,8 +40,8 @@ The dashboard allows you to:
 
 The project uses the following APIs and data sources:
 
-- Alpha Vantage API for fetching historical stock prices
-- yfinance library as a fallback for fetching stock data
+- Yfinance library for fetching historical stock prices
+- Alpha Vantage API as a fallback for fetching stock data
 - PostgreSQL database for storing and retrieving stock price data
 
 The `data_fetcher.py` module handles the data fetching and insertion into the database.
