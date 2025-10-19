@@ -30,11 +30,11 @@ This tab displays the stock's closing price alongside the Simple Moving Average 
 
 ![Price and Trends Data Table](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/price%26trends-2.png)
 
-### 2. Tab 4: 📚 Compare & Correlate
+### 2. Tab 2: 🔍 Abrupt Changes Detection
 
-This section is vital for portfolio diversification. It plots multiple stocks on a single chart and displays the resulting **Correlation Matrix** showing their pairwise relationship coefficients.
+This tab allows users to define a percentage threshold and highlights specific trading days where the price movement exceeded that threshold. The table displays the `trade_date`, `close_price`, and the calculated `pct_change` for flagged events.
 
-![Compare and Correlate Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/Compare%26Correlate.png)
+![Abrupt Changes Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/abrupt_changes.png)
 
 ### 3. Tab 3: 🤖 ML & Volatility / Risk Analysis
 
@@ -42,11 +42,11 @@ This chart visualizes the stock's instability (volatility) and risk level over t
 
 ![ML and Volatility Risk Analysis](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/ML%26Volatility-Risk%20Analysis.png)
 
-### 4. Tab 2: 🔍 Abrupt Changes Detection
+### 4. Tab 4: 📚 Compare & Correlate
 
-This tab allows users to define a percentage threshold and highlights specific trading days where the price movement exceeded that threshold. The table displays the `trade_date`, `close_price`, and the calculated `pct_change` for flagged events.
+This section is vital for portfolio diversification. It plots multiple stocks on a single chart and displays the resulting **Correlation Matrix** showing their pairwise relationship coefficients.
 
-![Abrupt Changes Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/abrupt_changes.png)
+![Compare and Correlate Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/Compare%26Correlate.png)
 
 ### 5. Tab 5: ⚙️ Export & Info Utility
 
