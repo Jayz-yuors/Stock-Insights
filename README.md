@@ -4,6 +4,7 @@
 
 The **Stock Insights Dashboard** is a web-based application built with **Streamlit** that provides comprehensive historical analysis for a predefined list of stocks (primarily Nifty50 stocks). The project follows a robust **ETL** (Extract, Transform, Load) pipeline, fetching data from external financial APIs, storing it in a PostgreSQL database, and performing various technical and statistical analyses to offer actionable insights.
 
+
 ---
 
 ## Features
