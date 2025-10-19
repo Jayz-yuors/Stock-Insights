@@ -66,7 +66,7 @@ The dashboard provides multiple avenues for accessing the analyzed data:
 
 ---
 
-## Technologies Used
+## Tech-Stack :
 
 | Category | Technology | Purpose |
 | :--- | :--- | :--- |
