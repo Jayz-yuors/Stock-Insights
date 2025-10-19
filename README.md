@@ -20,36 +20,39 @@ The **Stock Insights Dashboard** is a web-based application built with **Streaml
 
 ## Dashboard Visuals: Key Features
 
+The following images illustrate the interface and analysis screens.
+
 ### 1. Tab 1: 📊 Price & Trends (SMA/EMA)
 
-This tab displays the stock's closing price alongside the Simple Moving Average (SMA) and Exponential Moving Average (EMA) to identify clear market trends. The full data table is accessible via the expandable toggle.
+This tab displays the stock's closing price alongside the Simple Moving Average (SMA) and Exponential Moving Average (EMA) to identify clear market trends.
 
-![Price and Trends Chart](<YOUR_RAW_BASE_URL>/assets/price&trends-1.png)
-![Price and Trends Data Table](<YOUR_RAW_BASE_URL>/assets/price&trends-2.png)
+![Price and Trends Chart](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/price%26trends-1.png)
+
+![Price and Trends Data Table](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/price%26trends-2.png)
 
 ### 2. Tab 4: 📚 Compare & Correlate
 
-This section is vital for portfolio diversification. It plots multiple stocks (e.g., ICICI Bank, Kotak Mahindra Bank, Reliance Industries) on a single chart and displays the resulting **Correlation Matrix** showing their pairwise relationship coefficients.
+This section is vital for portfolio diversification. It plots multiple stocks on a single chart and displays the resulting **Correlation Matrix** showing their pairwise relationship coefficients.
 
-![Compare and Correlate Tab](<YOUR_RAW_BASE_URL>/assets/Compare&Correlate.png)
+![Compare and Correlate Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/Compare%26Correlate.png)
 
 ### 3. Tab 3: 🤖 ML & Volatility / Risk Analysis
 
-This chart visualizes the stock's instability (volatility) and risk level over time, adjustable via the **SMA/Volatility Window (days)** slider (set to 20 in the image).
+This chart visualizes the stock's instability (volatility) and risk level over time, adjustable via the **SMA/Volatility Window (days)** slider.
 
-![ML and Volatility Risk Analysis](<YOUR_RAW_BASE_URL>/assets/ML&Volatility-Risk Analysis.png)
+![ML and Volatility Risk Analysis](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/ML%26Volatility-Risk%20Analysis.png)
 
 ### 4. Tab 2: 🔍 Abrupt Changes Detection
 
 This tab allows users to define a percentage threshold and highlights specific trading days where the price movement exceeded that threshold. The table displays the `trade_date`, `close_price`, and the calculated `pct_change` for flagged events.
 
-![Abrupt Changes Tab](<YOUR_RAW_BASE_URL>/assets/abrupt_changes.png)
+![Abrupt Changes Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/abrupt_changes.png)
 
 ### 5. Tab 5: ⚙️ Export & Info Utility
 
 This utility tab allows users to review basic company information (retrieved from the database) and offers an **"Export Data as CSV"** button for downloading the full historical data.
 
-![Export and Info Tab](<YOUR_RAW_BASE_URL>/assets/Export&Info.png)
+![Export and Info Tab](https://raw.githubusercontent.com/Jayz-yuors/Stock-Insights/refs/heads/main/assets/Export%26Info.png)
 
 ---
 
