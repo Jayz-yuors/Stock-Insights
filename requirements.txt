@@ -1,9 +1,8 @@
 streamlit
+psycopg2-binary
 pandas
 numpy
-matplotlib
+plotly
 yfinance
 alpha_vantage
-requests
-psycopg2
-
+matplotlib
