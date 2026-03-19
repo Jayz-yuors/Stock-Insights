@@ -1,193 +1,216 @@
 from db_config import create_connection
-from alpha_vantage.timeseries import TimeSeries
-import yfinance as yf  # YahooFinance
-from datetime import datetime
+from insert_companies import insert_companies
+import yfinance as yf
 import pandas as pd
+from datetime import datetime, timedelta, date
 import logging
+import time
 
-# Setup basic logging to file + console
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("data_fetch_log.txt"),
-        logging.StreamHandler()
-    ]
 )
 
-ALPHA_VANTAGE_API_KEY = 'H13FNA09HVUDWWKU'
+START_DATE          = date(2015, 1, 1)
+REQUEST_PAUSE_SEC   = 0.3
+SAFETY_LOOKBACK_DAYS = 7   # Helps recover missing gaps from Yahoo
 
 
-def fetch_alpha_vantage(ticker):
-    """Fetch data from Alpha Vantage API."""
+# --------------------------
+# Safe numeric conversion
+# --------------------------
+def safe_float(v):
     try:
-        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
-        data, _ = ts.get_daily(symbol=ticker, outputsize='full')
-        return data
-    except Exception as e:
-        logging.warning(f"Alpha Vantage error for {ticker}: {e}")
+        return float(v)
+    except Exception:
         return None
 
 
-def fetch_yfinance(ticker):
-    """Fetch data from Yahoo Finance as a fallback."""
+def safe_int(v):
     try:
-        data = yf.download(ticker, period="max", interval="1d", auto_adjust=True, progress=False)
-        if data.empty:
-            logging.warning(f"YFinance returned empty data for {ticker}")
-            return None
-        return data
-    except Exception as e:
-        logging.error(f"YFinance error for {ticker}: {e}")
-        return None
+        return int(float(v))
+    except Exception:
+        return 0
 
 
-def safe_scalar(val):
-    """Safely extract scalar from Series if needed."""
-    if isinstance(val, pd.Series):
-        return val.iloc[0]
-    return val
-
-
+# --------------------------
+# Company List Loader
+# --------------------------
 def get_company_list():
-    """Fetch list of all tickers from database."""
+    """
+    Return all ticker symbols from PostgreSQL companies table.
+    If the table is empty, auto-insert the default list first
+    (mirrors original MongoDB behaviour exactly).
+    """
     conn = create_connection()
     with conn.cursor() as cur:
         cur.execute("SELECT ticker_symbol FROM companies ORDER BY company_name;")
-        companies = cur.fetchall()
+        rows = cur.fetchall()
     conn.close()
-    return [c[0] for c in companies]
+
+    if not rows:
+        logging.warning("⚠ No companies in DB — inserting default list")
+        insert_companies()
+        conn = create_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT ticker_symbol FROM companies ORDER BY company_name;")
+            rows = cur.fetchall()
+        conn.close()
+        logging.info("✔ Default companies inserted!")
+
+    return [r[0] for r in rows]
 
 
-def get_company_id(conn, ticker_symbol):
-    """Return company_id from ticker symbol."""
+# --------------------------
+# Get latest stored date
+# --------------------------
+def get_latest_date(ticker):
+    """
+    Return the most recent trade_date already stored for this ticker,
+    or None if no data exists yet.
+    Mirrors: db["stock_prices"].find_one({"ticker": ticker}, sort=[("date", -1)])
+    """
+    conn = create_connection()
     with conn.cursor() as cur:
-        cur.execute("SELECT company_id FROM companies WHERE ticker_symbol = %s;", (ticker_symbol,))
+        cur.execute(
+            """
+            SELECT MAX(sp.trade_date)
+            FROM stock_prices sp
+            JOIN companies c ON sp.company_id = c.company_id
+            WHERE c.ticker_symbol = %s;
+            """,
+            (ticker,),
+        )
         result = cur.fetchone()
-    return result[0] if result else None
-
-
-def get_latest_date(conn, company_id):
-    """Return the latest date already stored for this company."""
-    with conn.cursor() as cur:
-        cur.execute("SELECT MAX(trade_date) FROM stock_prices WHERE company_id = %s;", (company_id,))
-        result = cur.fetchone()
+    conn.close()
     return result[0] if result and result[0] else None
 
 
-def insert_prices(df, ticker_symbol):
-    """Insert or update stock prices efficiently, avoiding duplicates."""
-    # Only keep data after 2015
-    df = df[df.index >= '2015-01-01']
-    if df.empty:
-        logging.info(f"No price data from 2015 onwards for {ticker_symbol}")
-        return 0
+# --------------------------
+# Fetch new data from Yahoo
+# --------------------------
+def fetch_yfinance(ticker, start_date):
+    today = datetime.now().date()
 
+    if start_date >= today:
+        logging.info(f"{ticker}: Already updated — no fetch needed")
+        return None
+
+    logging.info(f"{ticker}: Fetching from {start_date} to {today} …")
+
+    df = yf.download(
+        ticker,
+        start=start_date.strftime("%Y-%m-%d"),
+        end=today.strftime("%Y-%m-%d"),
+        interval="1d",
+        auto_adjust=True,
+        progress=False,
+        threads=True,
+    )
+
+    if df.empty:
+        logging.warning(f"{ticker}: 🚫 No new data received")
+        return None
+
+    df.index = pd.to_datetime(df.index, utc=False)
+    logging.info(f"{ticker}: ✔ Downloaded {len(df)} rows")
+    return df
+
+
+# --------------------------
+# Insert New Data into PostgreSQL
+# --------------------------
+def insert_prices(df, ticker):
+    """
+    Upsert OHLCV rows into stock_prices.
+    Mirrors the original MongoDB update_one(..., upsert=True) exactly.
+    """
     conn = create_connection()
-    company_id = get_company_id(conn, ticker_symbol)
-    if not company_id:
-        logging.warning(f"Company not found for ticker {ticker_symbol}")
+
+    # Resolve company_id
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT company_id FROM companies WHERE ticker_symbol = %s;",
+            (ticker,),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        logging.warning(f"{ticker}: Not found in companies table — skipping")
         conn.close()
-        return 0
+        return
 
-    latest_date = get_latest_date(conn, company_id)
-
-    # Filter only new data (after the last stored date)
-    if latest_date:
-        df = df[df.index > pd.to_datetime(latest_date)]
-
-    if df.empty:
-        conn.close()
-        return 0  # Already up-to-date
-
-    # Detect column naming pattern
-    price_cols_candidates = [
-        ('Open', 'High', 'Low', 'Close', 'Volume'),  # yfinance
-        ('1. open', '2. high', '3. low', '4. close', '5. volume')  # AlphaVantage
-    ]
-    for cols in price_cols_candidates:
-        if all(col in df.columns for col in cols):
-            open_col, high_col, low_col, close_col, vol_col = cols
-            break
-    else:
-        logging.warning(f"Price columns not found for {ticker_symbol}: {df.columns.tolist()}")
-        conn.close()
-        return 0
-
-    inserted_count = 0
+    company_id = row[0]
+    inserted   = 0
 
     with conn.cursor() as cur:
-        for idx, row in df.iterrows():
-            try:
-                open_price = float(safe_scalar(row.get(open_col, 0)))
-                high_price = float(safe_scalar(row.get(high_col, 0)))
-                low_price = float(safe_scalar(row.get(low_col, 0)))
-                close_price = float(safe_scalar(row.get(close_col, 0)))
-                volume_val = safe_scalar(row.get(vol_col, 0))
-                volume = int(volume_val) if pd.notna(volume_val) else 0
+        for ts, row_data in df.iterrows():
+            trade_date = ts.date()
 
-                cur.execute(
-                    """
-                    INSERT INTO stock_prices (company_id, trade_date, open_price, high_price, low_price, close_price, volume)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (company_id, trade_date) DO UPDATE SET
-                        open_price=EXCLUDED.open_price,
-                        high_price=EXCLUDED.high_price,
-                        low_price=EXCLUDED.low_price,
-                        close_price=EXCLUDED.close_price,
-                        volume=EXCLUDED.volume;
-                    """,
-                    (company_id, idx.strftime('%Y-%m-%d'),
-                     open_price, high_price, low_price, close_price, volume)
-                )
-                inserted_count += 1
-            except Exception as e:
-                logging.error(f"Error inserting row for {ticker_symbol} on {idx}: {e}")
+            # Flatten MultiIndex columns produced by recent yfinance versions
+            def _get(col_name):
+                # Try plain name first, then (name, ticker) MultiIndex key
+                if col_name in df.columns:
+                    return row_data[col_name]
+                for key in df.columns:
+                    if isinstance(key, tuple) and key[0] == col_name:
+                        return row_data[key]
+                return None
+
+            cur.execute(
+                """
+                INSERT INTO stock_prices
+                    (company_id, trade_date, open_price, high_price,
+                     low_price, close_price, volume)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (company_id, trade_date) DO UPDATE SET
+                    open_price  = EXCLUDED.open_price,
+                    high_price  = EXCLUDED.high_price,
+                    low_price   = EXCLUDED.low_price,
+                    close_price = EXCLUDED.close_price,
+                    volume      = EXCLUDED.volume;
+                """,
+                (
+                    company_id,
+                    trade_date,
+                    safe_float(_get("Open")),
+                    safe_float(_get("High")),
+                    safe_float(_get("Low")),
+                    safe_float(_get("Close")),
+                    safe_int(_get("Volume")),
+                ),
+            )
+            inserted += 1
 
     conn.commit()
     conn.close()
-
-    logging.info(f"Inserted/updated {inserted_count} records for {ticker_symbol}")
-    return inserted_count
+    logging.info(f"{ticker}: 🔄 {inserted} rows inserted/updated")
 
 
+# --------------------------
+# MAIN DAILY UPDATER
+# --------------------------
 def run_fetching():
-    """Main process: fetch & insert data for all companies."""
-    start_time = datetime.now()
     tickers = get_company_list()
-    total = len(tickers)
-    success_count = 0
-    fail_count = 0
-    total_new_rows = 0
+    logging.info(f"🚀 Running DB Sync for {len(tickers)} tickers")
 
-    print(f"\n=== Fetch started for {total} companies at {start_time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+    for ticker in tickers:
+        last_dt = get_latest_date(ticker)
 
-    for idx, ticker in enumerate(tickers, start=1):
-        print(f"[{idx}/{total}] {ticker}", end=" ", flush=True)
-
-        data = fetch_alpha_vantage(ticker)
-        if data is None or data.empty:
-            data = fetch_yfinance(ticker)
-
-        if data is not None and not data.empty:
-            inserted = insert_prices(data, ticker)
-            if inserted > 0:
-                success_count += 1
-                total_new_rows += inserted
-                print(f"-> {inserted} new rows")
-            else:
-                print("-> up to date")
+        # If DB has history, fetch with a small overlap to fill any gaps
+        if last_dt:
+            start_date = last_dt - timedelta(days=SAFETY_LOOKBACK_DAYS)
         else:
-            fail_count += 1
-            print("-> no data")
+            start_date = START_DATE
 
-    end_time = datetime.now()
-    duration = end_time - start_time
+        df = fetch_yfinance(ticker, start_date)
 
-    summary = (f"\n=== Completed: total={total}, success_updates={success_count}, "
-               f"failures={fail_count}, new_rows={total_new_rows}, time_taken={duration} ===")
-    print(summary)
-    logging.info(summary)
+        if df is not None:
+            insert_prices(df, ticker)
+
+        time.sleep(REQUEST_PAUSE_SEC)
+
+    logging.info("✨ DB Sync Finished Successfully!")
 
 
 if __name__ == "__main__":
