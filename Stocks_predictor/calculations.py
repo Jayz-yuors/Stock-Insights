@@ -34,7 +34,8 @@ def fetch_prices(ticker_symbol, start_date=None, end_date=None):
                sp.volume
         FROM stock_prices sp
         JOIN companies    c  ON sp.company_id = c.company_id
-        WHERE c.ticker_symbol = %s
+                WHERE c.ticker_symbol = %s
+                    AND sp.close_price IS NOT NULL
     """
     params = [ticker_symbol]
 
@@ -57,6 +58,14 @@ def fetch_prices(ticker_symbol, start_date=None, end_date=None):
         return None
 
     df["trade_date"] = pd.to_datetime(df["trade_date"])
+    for column in ["open", "high", "low", "close", "volume"]:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    df = df.dropna(subset=["close"])
+    if df.empty:
+        return None
+
     return df
 
 
@@ -74,6 +83,7 @@ def fetch_current_price(ticker_symbol):
             FROM stock_prices sp
             JOIN companies    c  ON sp.company_id = c.company_id
             WHERE c.ticker_symbol = %s
+              AND sp.close_price IS NOT NULL
             ORDER BY sp.trade_date DESC
             LIMIT 1;
             """,
