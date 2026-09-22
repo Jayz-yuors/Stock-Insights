@@ -54,6 +54,10 @@ sector_map = {
     "HINDALCO.NS":   "Metals & Mining ⚒️",
     "TATASTEEL.NS":  "Steel Manufacturing 🔩",
     "AMBUJACEM.NS":  "Cement & Construction 🧱",
+    "RPOWER.NS":     "Power Generation ⚡",
+    "DIVISLAB.NS":   "Pharmaceuticals 💊",
+    "SHREECEM.NS":   "Cement & Building Material 🧱",
+    "ADANIENT.NS":   "Diversified 🌐"
 }
 
 # ============== BASIC PAGE CONFIG ==============
@@ -234,6 +238,8 @@ else:
     """, unsafe_allow_html=True)
 
 # ============== FOOTER ==============
+
+# ============== FOOTER (Updated daily, no developer name) ==============
 st.markdown(
     f"""
     <div style="
@@ -245,13 +251,7 @@ st.markdown(
         color:#a6fff5;
         border-top:1px solid rgba(255,255,255,0.15);
     ">
-        🚀 Developed by
-        <a href="https://www.linkedin.com/in/jay-keluskar-b17601358"
-           target="_blank"
-           style="color:#4dd6ff; text-decoration:none; font-weight:600;">
-           Jay Keluskar
-        </a> — 2025
-        <br><span style='font-size:13px; color:#9cdcff;'>
+        <span style='font-size:13px; color:#9cdcff;'>
             🔄 Updated daily at <strong>10:00 AM</strong> & <strong>11:00 PM IST</strong><br>
             📅 Data available till: <strong style='color:#7afcff;'>{last_updated}</strong>
         </span>
@@ -259,6 +259,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 if selected_companies:
     st.sidebar.markdown("""
@@ -511,9 +512,13 @@ with tab1:
 
         df        = add_technical_indicators(df)
         col_close = get_close_price_column(df)
+        last_valid_close = df[col_close].dropna().iloc[-1] if df[col_close].notna().any() else None
 
         st.markdown(f"### 📌 {ticker}")
-        st.metric("Latest Close Price", f"₹ {df[col_close].iloc[-1]:.2f}")
+        st.metric(
+            "Latest Close Price",
+            f"₹ {last_valid_close:.2f}" if last_valid_close is not None else "Unavailable",
+        )
 
         if view_mode == "Overlay on Chart":
             fig = go.Figure()
@@ -866,7 +871,16 @@ with tab5:
         col_close = get_close_price_column(df)
 
         conf, label, pct, vol = analyze_trend_confidence(df, col_close, horizon)
-        latest = df[col_close].iloc[-1]
+        valid_prices = (
+            pd.to_numeric(df[col_close], errors="coerce")
+            .replace([np.inf, -np.inf], np.nan)
+            .dropna()
+        )
+        if valid_prices.empty or valid_prices.iloc[-1] <= 0:
+            st.warning(f"{ticker}: no valid latest closing price is available.")
+            continue
+
+        latest = float(valid_prices.iloc[-1])
         shares = max(1, int(budget / latest))
 
         st.markdown(f"---\n### {ticker}")
