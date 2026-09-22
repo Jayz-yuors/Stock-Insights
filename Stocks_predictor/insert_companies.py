@@ -38,6 +38,11 @@ DEFAULT_COMPANIES = [
     ("Hindalco Industries",                 "HINDALCO.NS"),
     ("Tata Steel",                          "TATASTEEL.NS"),
     ("Ambuja Cement",                       "AMBUJACEM.NS"),
+    ("RIR Power Electronics",                   "RPOWER.NS"),
+    ("Divi's Laboratories",                   "DIVISLAB.NS"),
+    ("Shree Cement",                       "SHREECEM.NS"),
+    ("Adani Enterprises",                   "ADANIENT.NS"),
+    
 ]
 
 
