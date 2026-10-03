@@ -1,0 +1,9 @@
+{
+  "original_branch": "main",
+  "candidate_branch": "sentinelai/security-remediation-20261003-180007",
+  "candidate_path": "C:\\Users\\Shruti\\AppData\\Local\\Temp\\sentinelai-remediation-jt1qzkhh\\Stock-Insights",
+  "ai_candidate_applied": false,
+  "remediation_commit_sha": "98622c9167dc115c4a0921785ebb8b418b909983",
+  "evidence_directory": ".sentinelai/remediation/20261003-175936-550774",
+  "evidence_commit_sha": "713ecf34920017de3ade33b88c72e4e11203910b"
+}
