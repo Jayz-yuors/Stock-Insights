@@ -12,6 +12,7 @@ from calculations import (
     volatility_and_risk, correlation_analysis,
     compare_companies, get_close_price_column,
     add_technical_indicators,
+    predict_stock_direction,
 )
 from data_fetcher import get_company_list, run_fetching, get_latest_date
 
@@ -757,176 +758,313 @@ with tab4:
         plot_correlation(corr)
 
 
-# ============== TAB 5 — Smart Insights ==============
+# ============== TAB 5 — ML Market Intelligence ==============
 with tab5:
-    st.subheader("🧠 Smart Insights, Opportunities & Forecast")
-    st.markdown("### 📘 Understand AI-Driven Market Signals")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        <div style="
-            background:rgba(0,255,200,0.08);
-            border-left:4px solid #00ffc8;
-            padding:12px 16px;
-            border-radius:8px;
-            color:#b9fff4;
-            margin-bottom:12px;
-        ">
-            <strong>🤖 AI Trend Confidence</strong><br>
-            • Tags a stock as Buy / Hold / Risky 🔎<br>
-            • Reduces emotional trading mistakes
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-        <div style="
-            background:rgba(0,255,200,0.08);
-            border-left:4px solid #00ffc8;
-            padding:12px 16px;
-            border-radius:8px;
-            color:#b9fff4;
-            margin-bottom:12px;
-        ">
-            <strong>📈 Future Price Tendency</strong><br>
-            • Shows short-term directional pressure<br>
-            • Improves timing for smarter entries
-        </div>
-        """, unsafe_allow_html=True)
-
-    col3, col4 = st.columns(2)
-    with col3:
-        st.markdown("""
-        <div style="
-            background:rgba(0,255,200,0.08);
-            border-left:4px solid #00ffc8;
-            padding:12px 16px;
-            border-radius:8px;
-            color:#b9fff4;
-            margin-bottom:12px;
-        ">
-            <strong>🎯 Buy & Sell Zones</strong><br>
-            • Shows where reversals are likely<br>
-            • Avoid buying tops and selling bottoms
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown("""
-        <div style="
-            background:rgba(0,255,200,0.08);
-            border-left:4px solid #00ffc8;
-            padding:12px 16px;
-            border-radius:8px;
-            color:#b9fff4;
-            margin-bottom:12px;
-        ">
-            <strong>💰 Share Affordability</strong><br>
-            • Teaches sizing and discipline<br>
-            • Plan smarter investments
-        </div>
-        """, unsafe_allow_html=True)
-
+    st.subheader("🧠 ML Market Intelligence")
     st.markdown("""
     <div style="
-        background:rgba(0,255,200,0.05);
+        background:rgba(0,255,200,0.06);
         border-left:4px solid #00ffc8;
         padding:14px 18px;
         border-radius:8px;
-        margin-top:6px;
-        color:#a6fff5;
+        margin-bottom:16px;
+        color:#b9fff4;
     ">
-        <strong>🎯 Why this matters?</strong><br>
-        Builds <strong>high-confidence decisions</strong> and prevents
-        <strong>FOMO or panic selling</strong> — clarity on
-        <strong>when to enter</strong> & <strong>exit</strong> the market like a smart investor.
+        <strong>🤖 What this tab does</strong><br>
+        Uses OHLCV data and technical indicators to evaluate next-day direction
+        with Logistic Regression, Decision Tree, Random Forest and Gradient Boosting.
+        K-Means separately identifies the current market regime.
     </div>
     """, unsafe_allow_html=True)
-    st.caption("Educational purpose only — Not for financial decisions 📘")
 
-    budget_vals, budget_labels = build_budget_options()
-    budget       = budget_vals[4]
-    budget_label = budget_labels[4]
-    horizon      = "Short Term"
+    st.caption(
+        "Educational ML analysis only. Model predictions are not financial advice. "
+        "K-Means regime numbers are cluster identifiers, not inherently bullish or bearish labels."
+    )
 
-    colA, colB, colC = st.columns(3)
-    with colA:
-        budget_label     = st.selectbox("Budget", budget_labels, index=4)
-        budget           = budget_vals[budget_labels.index(budget_label)]
-    with colB:
-        horizon          = st.radio("Type", ["Short Term", "Long Term"], horizontal=True)
-    with colC:
-        forecast_window  = 15 if horizon == "Short Term" else 60
-        st.metric("Forecast Window", f"{forecast_window} days")
+    test_size = st.slider(
+        "Chronological Test Set (%)",
+        min_value=10,
+        max_value=40,
+        value=20,
+        step=5,
+        help="The final portion of the historical data is reserved for out-of-sample evaluation."
+    ) / 100
 
-    st.caption("Based on trends — Not financial advice. Educational use only.")
+    run_ml = st.button(
+        "🚀 Run ML Market Analysis",
+        type="primary",
+        use_container_width=True,
+    )
 
-    for ticker in selected_companies:
-        df = fetch_prices(ticker)
-        if df is None or df.empty:
-            continue
+    # Streamlit reruns on interaction, so a button is used to make the
+    # relatively expensive model training explicit.
+    if run_ml:
+        for ticker in selected_companies:
+            st.markdown(f"---\n### 📊 {ticker}")
 
-        df        = compute_sma(df)
-        col_close = get_close_price_column(df)
+            df = fetch_prices(ticker, start_date, end_date)
 
-        conf, label, pct, vol = analyze_trend_confidence(df, col_close, horizon)
-        valid_prices = (
-            pd.to_numeric(df[col_close], errors="coerce")
-            .replace([np.inf, -np.inf], np.nan)
-            .dropna()
-        )
-        if valid_prices.empty or valid_prices.iloc[-1] <= 0:
-            st.warning(f"{ticker}: no valid latest closing price is available.")
-            continue
+            if df is None or df.empty:
+                st.warning(f"{ticker}: no historical price data is available.")
+                continue
 
-        latest = float(valid_prices.iloc[-1])
-        shares = max(1, int(budget / latest))
+            if len(df) < 120:
+                st.warning(
+                    f"{ticker}: only {len(df)} observations are available. "
+                    "At least 120 observations are recommended for this analysis."
+                )
+                continue
 
-        st.markdown(f"---\n### {ticker}")
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Signal",     label)
-        col2.metric("Confidence", f"{conf:.1f}%")
-        col3.metric("Trend %",    f"{pct:+.2f}%")
-        col4.metric("Volatility", f"{vol:.2f}%")
+            try:
+                result = predict_stock_direction(
+                    df,
+                    test_size=test_size,
+                )
+            except Exception as exc:
+                st.error(f"{ticker}: ML analysis failed — {exc}")
+                continue
 
-        st.caption(f"With {budget_label}, Approx shares possible: **{shares}**")
+            prediction = result.get("prediction", "N/A")
+            probability = result.get("probability")
+            best_model = result.get("best_model", "N/A")
+            regime = result.get("market_regime", "N/A")
 
-        buy_future, sell_future = project_future(df, col_close, horizon)
+            probability_pct = (
+                probability * 100
+                if probability is not None
+                else None
+            )
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df["trade_date"], y=df[col_close],
-                                  mode="lines", name="Close Price"))
-        fig.add_trace(go.Scatter(x=df["trade_date"], y=df["SMA"],
-                                  mode="lines", name="SMA"))
+            # ----------------------------------------------------
+            # Current ML output
+            # ----------------------------------------------------
+            metric1, metric2, metric3, metric4 = st.columns(4)
 
-        if buy_future is not None and not buy_future.empty:
-            fig.add_trace(go.Scatter(x=buy_future["trade_date"],
-                                      y=buy_future[col_close],
-                                      mode="markers", name="Future Buy",
-                                      marker_color="green"))
-        if sell_future is not None and not sell_future.empty:
-            fig.add_trace(go.Scatter(x=sell_future["trade_date"],
-                                      y=sell_future[col_close],
-                                      mode="markers", name="Future Sell",
-                                      marker_color="red"))
+            metric1.metric(
+                "Next-Day Direction",
+                prediction,
+            )
 
-        fig.update_layout(title=f"{ticker} — Forecasted Buy/Sell Zones")
-        st.plotly_chart(fig, use_container_width=True)
+            metric2.metric(
+                "Prediction Probability",
+                f"{probability_pct:.2f}%"
+                if probability_pct is not None
+                else "Unavailable",
+            )
 
-        with st.expander("🔮 Forecasted Opportunities"):
-            buy_col, sell_col = st.columns(2)
+            metric3.metric(
+                "Selected Model",
+                best_model,
+            )
 
-            buy_col.markdown("#### 🟢 Future Buy Opportunities")
-            if buy_future is None or buy_future.empty:
-                buy_col.info("No buy signals ahead 🚫")
-            else:
-                buy_col.dataframe(buy_future[["trade_date", col_close]],
-                                   use_container_width=True)
+            metric4.metric(
+                "Market Regime",
+                f"Cluster {regime}",
+            )
 
-            sell_col.markdown("#### 🔴 Future Sell Opportunities")
-            if sell_future is None or sell_future.empty:
-                sell_col.info("No sell signals detected 🚫")
-            else:
-                sell_col.dataframe(sell_future[["trade_date", col_close]],
-                                    use_container_width=True)
+            st.info(
+                f"The selected model is **{best_model}** based on the highest test-set F1 score. "
+                f"The current K-Means regime is **Cluster {regime}**. "
+                "Cluster numbers are identifiers and should not be interpreted as market direction by themselves."
+            )
+
+            # ----------------------------------------------------
+            # Model performance
+            # ----------------------------------------------------
+            st.markdown("#### 📈 Model Performance — Chronological Test Set")
+
+            metrics = result.get("model_metrics", {})
+
+            if metrics:
+                metrics_rows = []
+
+                for model_name, values in metrics.items():
+                    metrics_rows.append({
+                        "Model": model_name,
+                        "Accuracy": values.get("accuracy", 0.0),
+                        "Precision": values.get("precision", 0.0),
+                        "Recall": values.get("recall", 0.0),
+                        "F1": values.get("f1", 0.0),
+                    })
+
+                metrics_df = pd.DataFrame(metrics_rows)
+
+                display_metrics = metrics_df.copy()
+                for column in [
+                    "Accuracy",
+                    "Precision",
+                    "Recall",
+                    "F1",
+                ]:
+                    display_metrics[column] = display_metrics[column].map(
+                        lambda value: f"{value:.4f}"
+                    )
+
+                st.dataframe(
+                    display_metrics,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                fig_metrics = go.Figure()
+
+                for metric in [
+                    "Accuracy",
+                    "Precision",
+                    "Recall",
+                    "F1",
+                ]:
+                    fig_metrics.add_trace(
+                        go.Bar(
+                            x=metrics_df["Model"],
+                            y=metrics_df[metric],
+                            name=metric,
+                        )
+                    )
+
+                fig_metrics.update_layout(
+                    title=f"{ticker} — ML Model Comparison",
+                    barmode="group",
+                    yaxis=dict(range=[0, 1], title="Score"),
+                    xaxis_title="Model",
+                    height=450,
+                )
+
+                st.plotly_chart(
+                    fig_metrics,
+                    use_container_width=True,
+                )
+
+            # ----------------------------------------------------
+            # Feature importance
+            # ----------------------------------------------------
+            feature_importance = result.get(
+                "feature_importance",
+                {}
+            )
+
+            if feature_importance:
+                st.markdown("#### 🔎 Feature Importance")
+
+                importance_df = (
+                    pd.DataFrame(
+                        feature_importance.items(),
+                        columns=["Feature", "Importance"],
+                    )
+                    .sort_values(
+                        "Importance",
+                        ascending=False,
+                    )
+                    .head(15)
+                )
+
+                st.dataframe(
+                    importance_df,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                fig_importance = go.Figure(
+                    go.Bar(
+                        x=importance_df["Importance"],
+                        y=importance_df["Feature"],
+                        orientation="h",
+                    )
+                )
+
+                fig_importance.update_layout(
+                    title=f"{ticker} — Top ML Features",
+                    xaxis_title="Importance",
+                    yaxis_title="Feature",
+                    height=500,
+                    yaxis=dict(
+                        categoryorder="total ascending"
+                    ),
+                )
+
+                st.plotly_chart(
+                    fig_importance,
+                    use_container_width=True,
+                )
+
+            # ----------------------------------------------------
+            # Dataset / training information
+            # ----------------------------------------------------
+            st.markdown("#### 🧪 Training Information")
+
+            info1, info2, info3 = st.columns(3)
+
+            info1.metric(
+                "Training Samples",
+                f"{result.get('training_samples', 0):,}",
+            )
+
+            info2.metric(
+                "Testing Samples",
+                f"{result.get('testing_samples', 0):,}",
+            )
+
+            info3.metric(
+                "Features Used",
+                f"{len(result.get('features_used', [])):,}",
+            )
+
+            with st.expander("🧾 ML Features Used"):
+                st.write(result.get("features_used", []))
+
+            # ----------------------------------------------------
+            # Historical prediction context
+            # ----------------------------------------------------
+            ml_data = add_technical_indicators(df.copy())
+            close_col = get_close_price_column(ml_data)
+
+            st.markdown("#### 📊 Price + Technical Context")
+
+            fig_price = go.Figure()
+
+            fig_price.add_trace(
+                go.Scatter(
+                    x=ml_data["trade_date"],
+                    y=ml_data[close_col],
+                    mode="lines",
+                    name="Close Price",
+                )
+            )
+
+            for column, label in [
+                ("SMA_20", "SMA 20"),
+                ("SMA_50", "SMA 50"),
+                ("EMA_20", "EMA 20"),
+            ]:
+                if column in ml_data.columns:
+                    fig_price.add_trace(
+                        go.Scatter(
+                            x=ml_data["trade_date"],
+                            y=ml_data[column],
+                            mode="lines",
+                            name=label,
+                        )
+                    )
+
+            fig_price.update_layout(
+                title=f"{ticker} — Historical Price and Indicators",
+                xaxis_title="Date",
+                yaxis_title="Price",
+                height=500,
+            )
+
+            st.plotly_chart(
+                fig_price,
+                use_container_width=True,
+            )
+
+            with st.expander("📄 View ML Input Data"):
+                st.dataframe(
+                    ml_data.tail(100),
+                    use_container_width=True,
+                )
+                download_csv(
+                    ml_data,
+                    f"{ticker}_ml_input_data",
+                )
