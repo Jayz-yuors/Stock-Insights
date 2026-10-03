@@ -61,7 +61,9 @@
     "candidate_path": "C:\\Users\\Shruti\\AppData\\Local\\Temp\\sentinelai-remediation-jt1qzkhh\\Stock-Insights",
     "ai_candidate_applied": false,
     "remediation_commit_sha": "98622c9167dc115c4a0921785ebb8b418b909983",
-    "evidence_directory": ".sentinelai/remediation/20261003-175936-550774"
+    "evidence_directory": ".sentinelai/remediation/20261003-175936-550774",
+    "evidence_commit_sha": "713ecf34920017de3ade33b88c72e4e11203910b",
+    "final_evidence_commit_sha": "c127aa5151ea244c2882d46e62ebeb81fbdbb823"
   },
   "tests": {
     "candidate_changed": true,
@@ -75,5 +77,13 @@
   "artifacts": {
     "html": "C:\\Users\\Shruti\\jk\\Python\\Python_GUI\\Project_series\\11.SentiNelAI\\.sentinelai\\reports\\SENTINELAI_REMEDIATION_REPORT_20261003-175936-550774.html",
     "pdf": "C:\\Users\\Shruti\\jk\\Python\\Python_GUI\\Project_series\\11.SentiNelAI\\.sentinelai\\reports\\SENTINELAI_REMEDIATION_REPORT_20261003-175936-550774.pdf"
+  },
+  "github_audit": {
+    "number": 4,
+    "title": "feat(sentinelai): verified remediation",
+    "url": "https://github.com/Jayz-yuors/Stock-Insights/pull/4",
+    "state": "open",
+    "head_branch": "sentinelai/security-remediation-20261003-180007",
+    "base_branch": "main"
   }
 }
