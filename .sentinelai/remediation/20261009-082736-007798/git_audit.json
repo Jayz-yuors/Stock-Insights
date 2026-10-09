@@ -1,0 +1,7 @@
+{
+  "original_branch": "main",
+  "candidate_branch": "sentinelai/security-remediation-20261009-082908",
+  "candidate_path": "/tmp/sentinelai-remediation-cj3tyygb/Stock-Insights",
+  "ai_candidate_applied": true,
+  "remediation_commit_sha": "a6e2f2976e580d5979a2cb0fe3f1b999fc21c09f"
+}
