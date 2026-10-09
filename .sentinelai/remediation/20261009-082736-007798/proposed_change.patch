@@ -1,0 +1,375 @@
+--- a/Stocks_predictor/calculations.py
++++ b/Stocks_predictor/calculations.py
+@@ -1211,4 +1211,372 @@
+ # ============================================================
+ 
+ if __name__ == "__main__":
+-    test_ml_engine()+    test_ml_engine()
++
++# ============================================================
++# DWM SYLLABUS ANALYTICS
++# Data exploration, preprocessing, classification, regression,
++# clustering, association rules, and OLAP-style aggregation.
++# ============================================================
++
++def prepare_dwm_dataset(df):
++    """Clean OHLCV data and derive DWM-friendly mining features.
++
++    Keeps the original columns, sorts by date, removes duplicate dates,
++    imputes missing numeric values with the column median, and adds returns,
++    moving averages, volatility, and next-day direction target.
++    """
++    if df is None or df.empty:
++        raise ValueError("No stock observations are available for preprocessing.")
++
++    data = df.copy()
++    if "trade_date" in data.columns:
++        data["trade_date"] = pd.to_datetime(data["trade_date"], errors="coerce")
++        data = data.dropna(subset=["trade_date"]).sort_values("trade_date")
++        data = data.drop_duplicates(subset=["trade_date"], keep="last")
++
++    for col in ["open", "high", "low", "close", "volume"]:
++        if col in data.columns:
++            data[col] = pd.to_numeric(data[col], errors="coerce")
++
++    close_col = get_close_price_column(data)
++    data = data.dropna(subset=[close_col])
++    if data.empty:
++        raise ValueError("No valid closing prices remain after cleaning.")
++
++    data["daily_return"] = data[close_col].pct_change()
++    data["return_pct"] = data["daily_return"] * 100
++    data["SMA_20"] = data[close_col].rolling(20, min_periods=1).mean()
++    data["EMA_20"] = data[close_col].ewm(span=20, adjust=False).mean()
++    data["rolling_volatility"] = data["daily_return"].rolling(20, min_periods=2).std()
++    if "volume" in data.columns:
++        data["volume_change_pct"] = data["volume"].pct_change() * 100
++    else:
++        data["volume"] = np.nan
++        data["volume_change_pct"] = np.nan
++
++    # The target is shifted from the future; never use it as a predictor.
++    data["next_close"] = data[close_col].shift(-1)
++    data["next_day_direction"] = np.where(
++        data["next_close"].isna(), np.nan,
++        (data["next_close"] > data[close_col]).astype(float)
++    )
++    data["market_direction"] = np.where(
++        data["daily_return"] > 0, "Up",
++        np.where(data["daily_return"] < 0, "Down", "Flat")
++    )
++
++    numeric = data.select_dtypes(include=[np.number]).columns
++    target_columns = {"next_close", "next_day_direction"}
++    for col in numeric:
++        data[col] = data[col].replace([np.inf, -np.inf], np.nan)
++        # Never impute future targets: the final row has no known next-day label.
++        if col not in target_columns and data[col].notna().any():
++            data[col] = data[col].fillna(data[col].median())
++    return data.reset_index(drop=True)
++
++
++def summarize_dwm_dataset(df):
++    """Return dataset quality, descriptive statistics, and attribute types."""
++    if df is None or df.empty:
++        return {"overview": pd.DataFrame(), "statistics": pd.DataFrame(), "missing": pd.DataFrame()}
++    overview = pd.DataFrame({
++        "Measure": ["Rows", "Columns", "Duplicate rows", "Missing cells", "Memory (KB)"],
++        "Value": [
++            int(len(df)), int(df.shape[1]), int(df.duplicated().sum()),
++            int(df.isna().sum().sum()), round(df.memory_usage(deep=True).sum() / 1024, 2)
++        ]
++    })
++    statistics = df.select_dtypes(include=[np.number]).describe().transpose().reset_index().rename(columns={"index": "Attribute"})
++    missing = pd.DataFrame({
++        "Attribute": df.columns,
++        "Data Type": [str(df[c].dtype) for c in df.columns],
++        "Missing Count": [int(df[c].isna().sum()) for c in df.columns],
++        "Missing %": [round(float(df[c].isna().mean() * 100), 2) for c in df.columns],
++        "Unique Values": [int(df[c].nunique(dropna=True)) for c in df.columns],
++    }).sort_values(["Missing %", "Attribute"], ascending=[False, True])
++    return {"overview": overview, "statistics": statistics, "missing": missing}
++
++
++def run_dwm_supervised_analysis(df, test_fraction=0.2):
++    """Evaluate a simple/multiple linear regression and DT/Naive Bayes classifiers.
++
++    Chronological split is used for time-series data. Predictors are current-day
++    OHLCV and engineered features; targets are next day's close and direction.
++    """
++    if df is None or len(df) < 60:
++        raise ValueError("At least 60 observations are recommended for DWM model evaluation.")
++    try:
++        from sklearn.linear_model import LinearRegression
++        from sklearn.tree import DecisionTreeClassifier
++        from sklearn.naive_bayes import GaussianNB
++        from sklearn.preprocessing import StandardScaler
++        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, accuracy_score, precision_score, recall_score, f1_score
++    except ImportError as exc:
++        raise ImportError("Install scikit-learn to run regression and classification.") from exc
++
++    data = prepare_dwm_dataset(df)
++    close = get_close_price_column(data)
++    feature_candidates = ["open", "high", "low", close, "volume", "daily_return", "SMA_20", "EMA_20", "rolling_volatility", "volume_change_pct"]
++    features = [c for c in feature_candidates if c in data.columns]
++    model_data = data[features + ["next_close", "next_day_direction"]].replace([np.inf, -np.inf], np.nan).dropna()
++    if len(model_data) < 40:
++        raise ValueError("Not enough complete rows remain for model evaluation.")
++
++    split = int(len(model_data) * (1 - test_fraction))
++    split = min(max(split, 1), len(model_data) - 1)
++    train, test = model_data.iloc[:split], model_data.iloc[split:]
++    X_train, X_test = train[features], test[features]
++
++    # Simple linear regression: today's close -> next day's close.
++    simple_regression = LinearRegression().fit(X_train[[close]], train["next_close"])
++    simple_pred = simple_regression.predict(X_test[[close]])
++
++    # Multiple linear regression: several OHLCV/derived predictors -> next close.
++    regression = LinearRegression().fit(X_train, train["next_close"])
++    reg_pred = regression.predict(X_test)
++
++    regression_rows = []
++    for name, predictions in [
++        ("Simple Linear Regression", simple_pred),
++        ("Multiple Linear Regression", reg_pred),
++    ]:
++        regression_rows.append({
++            "Model": name,
++            "MAE": float(mean_absolute_error(test["next_close"], predictions)),
++            "RMSE": float(np.sqrt(mean_squared_error(test["next_close"], predictions))),
++            "R²": float(r2_score(test["next_close"], predictions)) if len(test) > 1 else np.nan,
++            "Train Rows": int(len(train)), "Test Rows": int(len(test))
++        })
++    regression_metrics = pd.DataFrame(regression_rows)
++    regression_predictions = pd.DataFrame({
++        "trade_date": data.loc[test.index, "trade_date"].values if "trade_date" in data else test.index,
++        "Actual Next Close": test["next_close"].values,
++        "Simple Regression Prediction": simple_pred,
++        "Multiple Regression Prediction": reg_pred,
++    })
++
++    # Classification target: next day's direction (up/down).
++    y_train = train["next_day_direction"].astype(int)
++    y_test = test["next_day_direction"].astype(int)
++    scaler = StandardScaler()
++    X_train_scaled = scaler.fit_transform(X_train)
++    X_test_scaled = scaler.transform(X_test)
++    classifiers = {
++        "Decision Tree (ID3-style)": DecisionTreeClassifier(criterion="entropy", max_depth=5, min_samples_leaf=3, random_state=42),
++        "Naive Bayes": GaussianNB(),
++    }
++    rows = []
++    for name, model in classifiers.items():
++        if name == "Naive Bayes":
++            model.fit(X_train_scaled, y_train)
++            pred = model.predict(X_test_scaled)
++        else:
++            model.fit(X_train, y_train)
++            pred = model.predict(X_test)
++        rows.append({
++            "Model": name,
++            "Accuracy": float(accuracy_score(y_test, pred)),
++            "Precision": float(precision_score(y_test, pred, zero_division=0)),
++            "Recall": float(recall_score(y_test, pred, zero_division=0)),
++            "F1 Score": float(f1_score(y_test, pred, zero_division=0)),
++        })
++    classification_metrics = pd.DataFrame(rows).sort_values("F1 Score", ascending=False)
++    return {
++        "regression_metrics": regression_metrics,
++        "regression_predictions": regression_predictions,
++        "classification_metrics": classification_metrics,
++        "feature_columns": features,
++        "train_rows": int(len(train)), "test_rows": int(len(test)),
++    }
++
++
++def build_stock_profiles(history_by_ticker):
++    """Aggregate selected OHLCV histories into one row per ticker for clustering."""
++    rows = []
++    for ticker, raw in history_by_ticker.items():
++        if raw is None or raw.empty:
++            continue
++        df = prepare_dwm_dataset(raw)
++        close = get_close_price_column(df)
++        returns = pd.to_numeric(df[close], errors="coerce").pct_change().dropna()
++        prices = pd.to_numeric(df[close], errors="coerce").dropna()
++        volume = pd.to_numeric(df.get("volume", pd.Series(dtype=float)), errors="coerce").dropna()
++        if prices.empty:
++            continue
++        rows.append({
++            "Ticker": ticker,
++            "Average Daily Return %": float(returns.mean() * 100) if not returns.empty else 0.0,
++            "Return Volatility %": float(returns.std() * 100) if len(returns) > 1 else 0.0,
++            "Total Return %": float((prices.iloc[-1] / prices.iloc[0] - 1) * 100) if prices.iloc[0] else 0.0,
++            "Average Volume": float(volume.mean()) if not volume.empty else 0.0,
++            "Price Range %": float((prices.max() - prices.min()) / prices.iloc[0] * 100) if prices.iloc[0] else 0.0,
++        })
++    return pd.DataFrame(rows)
++
++
++def cluster_stock_profiles(profiles, n_clusters=3, method="K-Means"):
++    """Cluster ticker profiles with K-Means or agglomerative hierarchical clustering."""
++    if profiles is None or profiles.empty:
++        raise ValueError("No stock profiles are available for clustering.")
++    try:
++        from sklearn.preprocessing import StandardScaler
++        from sklearn.cluster import KMeans, AgglomerativeClustering
++    except ImportError as exc:
++        raise ImportError("Install scikit-learn to run clustering.") from exc
++    features = [c for c in profiles.columns if c != "Ticker"]
++    values = profiles[features].replace([np.inf, -np.inf], np.nan)
++    values = values.fillna(values.median()).fillna(0)
++    if len(profiles) < 2:
++        raise ValueError("Select at least two tickers to compare clusters.")
++    k = min(max(2, int(n_clusters)), len(profiles))
++    scaled = StandardScaler().fit_transform(values)
++    if method == "Hierarchical (Agglomerative)":
++        labels = AgglomerativeClustering(n_clusters=k, linkage="ward").fit_predict(scaled)
++    else:
++        labels = KMeans(n_clusters=k, random_state=42, n_init=10).fit_predict(scaled)
++    result = profiles.copy()
++    result["Cluster"] = labels.astype(int) + 1
++    return result.sort_values(["Cluster", "Ticker"]).reset_index(drop=True)
++
++
++def build_market_transactions(history_by_ticker):
++    """Turn daily price/volume states into transactions for Apriori-style mining."""
++    date_baskets = {}
++    for ticker, raw in history_by_ticker.items():
++        if raw is None or raw.empty:
++            continue
++        df = prepare_dwm_dataset(raw)
++        close = get_close_price_column(df)
++        df["daily_return"] = pd.to_numeric(df[close], errors="coerce").pct_change()
++        volume_median = df["volume"].median() if "volume" in df else np.nan
++        vol_median = df["daily_return"].abs().median()
++        for _, row in df.iterrows():
++            if pd.isna(row.get("trade_date")):
++                continue
++            day = pd.Timestamp(row["trade_date"]).date().isoformat()
++            items = date_baskets.setdefault(day, set())
++            ret = row.get("daily_return", 0)
++            if pd.isna(ret):
++                continue
++            items.add(f"{ticker}:{'UP' if ret > 0 else 'DOWN' if ret < 0 else 'FLAT'}")
++            if "volume" in df.columns and pd.notna(row.get("volume")) and pd.notna(volume_median):
++                items.add(f"{ticker}:{'HIGH_VOLUME' if row['volume'] >= volume_median else 'LOW_VOLUME'}")
++            if pd.notna(vol_median):
++                items.add(f"{ticker}:{'HIGH_MOVE' if abs(ret) >= vol_median else 'LOW_MOVE'}")
++    return [(day, sorted(items)) for day, items in sorted(date_baskets.items()) if items]
++
++
++def mine_association_rules(transactions, min_support=0.1, min_confidence=0.5, max_itemset_size=3):
++    """Small, dependency-free Apriori implementation for DWM practicals.
++
++    Returns frequent itemsets and rules with support, confidence, and lift.
++    Intended for modest interactive selections, not very large transaction sets.
++    """
++    baskets = [set(items) for _, items in transactions] if transactions and isinstance(transactions[0], tuple) else [set(items) for items in transactions]
++    baskets = [b for b in baskets if b]
++    if not baskets:
++        return pd.DataFrame(), pd.DataFrame()
++    n = len(baskets)
++    min_count = max(1, int(np.ceil(float(min_support) * n)))
++    item_counts = {}
++    for basket in baskets:
++        for item in basket:
++            item_counts[frozenset([item])] = item_counts.get(frozenset([item]), 0) + 1
++    frequent = {items: count for items, count in item_counts.items() if count >= min_count}
++    all_frequent = dict(frequent)
++    k = 2
++    while frequent and k <= max_itemset_size:
++        prev_sets = list(frequent.keys())
++        candidates = set()
++        for i in range(len(prev_sets)):
++            for j in range(i + 1, len(prev_sets)):
++                union = prev_sets[i] | prev_sets[j]
++                if len(union) == k and all(frozenset(sub) in frequent for sub in __import__('itertools').combinations(union, k - 1)):
++                    candidates.add(union)
++        counts = {candidate: sum(candidate.issubset(b) for b in baskets) for candidate in candidates}
++        frequent = {items: count for items, count in counts.items() if count >= min_count}
++        all_frequent.update(frequent)
++        k += 1
++    itemset_rows = [{"Itemset": " + ".join(sorted(items)), "Length": len(items), "Support": count / n, "Count": count} for items, count in all_frequent.items()]
++    rules = []
++    for itemset, joint_count in all_frequent.items():
++        if len(itemset) < 2:
++            continue
++        for size in range(1, len(itemset)):
++            for antecedent_tuple in __import__('itertools').combinations(itemset, size):
++                antecedent = frozenset(antecedent_tuple)
++                consequent = itemset - antecedent
++                ant_count = sum(antecedent.issubset(b) for b in baskets)
++                cons_count = sum(consequent.issubset(b) for b in baskets)
++                if not ant_count or not cons_count:
++                    continue
++                support = joint_count / n
++                confidence = joint_count / ant_count
++                lift = confidence / (cons_count / n)
++                if confidence >= min_confidence:
++                    rules.append({
++                        "Antecedent": " + ".join(sorted(antecedent)),
++                        "Consequent": " + ".join(sorted(consequent)),
++                        "Support": support, "Confidence": confidence, "Lift": lift,
++                    })
++    itemsets_df = pd.DataFrame(itemset_rows).sort_values(["Length", "Support"], ascending=[True, False]) if itemset_rows else pd.DataFrame()
++    rules_df = pd.DataFrame(rules).sort_values(["Lift", "Confidence"], ascending=False) if rules else pd.DataFrame(columns=["Antecedent", "Consequent", "Support", "Confidence", "Lift"])
++    return itemsets_df.reset_index(drop=True), rules_df.reset_index(drop=True)
++
++
++def build_olap_fact_table(history_by_ticker):
++    """Combine histories into a tidy fact-like table for OLAP slice/dice/roll-up."""
++    frames = []
++    for ticker, raw in history_by_ticker.items():
++        if raw is None or raw.empty:
++            continue
++        df = raw.copy()
++        if "trade_date" not in df.columns:
++            continue
++        df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
++        close = get_close_price_column(df)
++        df[close] = pd.to_numeric(df[close], errors="coerce")
++        df = df.dropna(subset=["trade_date", close]).sort_values("trade_date")
++        if df.empty:
++            continue
++        df["Ticker"] = ticker
++        df["Year"] = df["trade_date"].dt.year
++        df["Month"] = df["trade_date"].dt.month
++        df["Quarter"] = "Q" + df["trade_date"].dt.quarter.astype(str)
++        df["Daily Return %"] = df[close].pct_change() * 100
++        df["Direction"] = np.where(df["Daily Return %"] > 0, "Up", np.where(df["Daily Return %"] < 0, "Down", "Flat"))
++        df["Close Value"] = df[close]
++        frames.append(df[["Ticker", "trade_date", "Year", "Quarter", "Month", "Direction", "Close Value", "Daily Return %"]])
++    if not frames:
++        return pd.DataFrame()
++    return pd.concat(frames, ignore_index=True)
++
++
++def olap_aggregate(fact_table, level="Monthly", selected_tickers=None, direction="All"):
++    """Perform OLAP slice/dice and roll-up at yearly, quarterly, or monthly level."""
++    if fact_table is None or fact_table.empty:
++        return pd.DataFrame()
++    data = fact_table.copy()
++    if selected_tickers:
++        data = data[data["Ticker"].isin(selected_tickers)]
++    if direction != "All":
++        data = data[data["Direction"] == direction]
++    if data.empty:
++        return pd.DataFrame()
++    if level == "Yearly":
++        group_cols = ["Year", "Ticker"]
++    elif level == "Quarterly":
++        group_cols = ["Year", "Quarter", "Ticker"]
++    else:
++        group_cols = ["Year", "Month", "Ticker"]
++    result = data.groupby(group_cols, dropna=False).agg(
++        Trading_Days=("Close Value", "count"),
++        Average_Close=("Close Value", "mean"),
++        Min_Close=("Close Value", "min"),
++        Max_Close=("Close Value", "max"),
++        Average_Daily_Return_Pct=("Daily Return %", "mean"),
++        Up_Days=("Direction", lambda s: int((s == "Up").sum())),
++        Down_Days=("Direction", lambda s: int((s == "Down").sum())),
++    ).reset_index()
++    return result.round(4)
