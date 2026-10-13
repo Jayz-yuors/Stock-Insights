@@ -1,0 +1,5 @@
+{
+  "allowed": true,
+  "mode": "pending-security-pipeline",
+  "reason": "Static verification passed. A synthetic security risk profile was not created by this workflow."
+}

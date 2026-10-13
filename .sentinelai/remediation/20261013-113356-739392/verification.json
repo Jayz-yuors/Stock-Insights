@@ -1,0 +1,6 @@
+{
+  "verified": true,
+  "method": "static",
+  "reason": "Target file passed available local syntax verification.",
+  "developer_reason": "changed app.py to include the changes done in calculations.py so that the frontend doesn't face any more errors."
+}
