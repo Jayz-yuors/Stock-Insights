@@ -3,5 +3,7 @@
   "candidate_branch": "sentinelai/security-remediation-20261013-113931",
   "candidate_path": "/tmp/sentinelai-remediation-ufzrmfi_/Stock-Insights",
   "ai_candidate_applied": false,
-  "remediation_commit_sha": "0b880ad38a9b2dcd5aebed84ed2dff530f5e2adc"
+  "remediation_commit_sha": "0b880ad38a9b2dcd5aebed84ed2dff530f5e2adc",
+  "evidence_directory": ".sentinelai/remediation/20261013-113356-739392",
+  "evidence_commit_sha": "873a6591793b2169a27844e5760f9ee365ce59a1"
 }
